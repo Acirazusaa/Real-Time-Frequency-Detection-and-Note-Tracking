@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login Page</title>
+    <link rel="stylesheet" href="LoginPageStyle.css" />
+  </head>
+
+  <body>
+    <script>
+      document.addEventListener("DOMContentLoaded", (event) => {
+        const isLoggedIn = localStorage.getItem("isLoggedIn");
+        let formState = "login";
+        const confirmPasswordContainerElement =
+          document.querySelector("#confirm_password");
+        const headerElement = document.querySelector("#header");
+        const signUpButtonRedirection = document.querySelector(
+          "#signup_btn_redirection"
+        );
+        const signUpLinkContainer = document.querySelector(".signup_link");
+        const loginLinkContainer = document.querySelector(".login_link");
+        const loginButtonRedirection = document.querySelector(
+          "#login_btn_redirection"
+        );
+        const forgotPasswordContainer = document.querySelector(".pass");
+        const submitButtonElement = document.querySelector("#submit_btn");
+
+        const usernameInputElement = document.querySelector("[data-username]");
+        const passwordInputElement = document.querySelector("[data-password]");
+        const confirmPasswordInputElement = document.querySelector(
+          "[data-confirm-password]"
+        );
+
+        signUpButtonRedirection.addEventListener("click", (event) => {
+          headerElement.textContent = "Register";
+          signUpLinkContainer.style.display = "none";
+          loginLinkContainer.style.display = "block";
+          confirmPasswordContainerElement.style.display = "block";
+          forgotPasswordContainer.style.display = "none";
+          submitButtonElement.value = "Register";
+          formState = "register";
+          usernameInputElement.value = "";
+          passwordInputElement.value = "";
+          confirmPasswordInputElement.value = "";
+        });
+
+        loginButtonRedirection.addEventListener("click", (event) => {
+          headerElement.textContent = "Login";
+          signUpLinkContainer.style.display = "block";
+          loginLinkContainer.style.display = "none";
+          confirmPasswordContainerElement.style.display = "none";
+          forgotPasswordContainer.style.display = "block";
+          submitButtonElement.value = "Login";
+          formState = "login";
+          usernameInputElement.value = "";
+          passwordInputElement.value = "";
+          confirmPasswordInputElement.value = "";
+        });
+
+        submitButtonElement.addEventListener("click", (event) => {
+          event.preventDefault();
+
+          const listOfUsers = localStorage.getItem("users")
+            ? JSON.parse(localStorage.getItem("users"))
+            : [];
+
+          if (formState === "login") {
+            const userInput = {
+              username: usernameInputElement.value,
+              password: passwordInputElement.value,
+            };
+
+            const isUserExist = listOfUsers?.some((data) => {
+              return data.username === userInput.username;
+            });
+
+            let errorMessageElement = usernameInputElement.nextElementSibling;
+            let errorPasswordMessageElement =
+              passwordInputElement.nextElementSibling;
+
+            if (!isUserExist) {
+              errorMessageElement.textContent = "User does not exist";
+              errorMessageElement.style.color = "red";
+              return;
+            }
+            errorMessageElement.textContent = "";
+
+            const selectedUser = listOfUsers.find(
+              (data) => data.username === userInput.username
+            );
+
+            if (selectedUser.password !== userInput.password) {
+              errorPasswordMessageElement.textContent = "Incorrect Password";
+              errorPasswordMessageElement.style.color = "red";
+              return;
+            }
+            errorPasswordMessageElement.textContent = "";
+
+            console.log("Logging in...");
+            localStorage.setItem("current_user", JSON.stringify(userInput));
+            window.location.assign("demo.html");
+            return;
+          }
+
+          if (formState === "register") {
+            const newUser = {
+              username: usernameInputElement.value,
+              password: passwordInputElement.value,
+            };
+            let errorMessageElement = usernameInputElement.nextElementSibling;
+            let errorPasswordMessageElement =
+              passwordInputElement.nextElementSibling;
+
+            const isUserExist = listOfUsers?.some((data) => {
+              return data.username === newUser.username;
+            });
+
+            if (isUserExist) {
+              errorMessageElement.textContent = "Username is already taken.";
+              errorMessageElement.style.color = "red";
+              return;
+            }
+
+            if (
+              passwordInputElement.value !== confirmPasswordInputElement.value
+            ) {
+              errorPasswordMessageElement.textContent =
+                "Password does not match";
+              errorPasswordMessageElement.style.color = "red";
+              return;
+            }
+            errorMessageElement.textContent = "";
+            errorPasswordMessageElement.textContent = "";
+
+            listOfUsers.push(newUser);
+            localStorage.setItem("users", JSON.stringify(listOfUsers));
+
+            const successMessageContainer = document.createElement("div");
+            const successMessageContent = document.createElement("p");
+            successMessageContainer.style.display = "flex";
+            successMessageContainer.style.width = "100%";
+            successMessageContainer.style.flexDirection = "column";
+            successMessageContainer.style.alignItems = "center";
+            successMessageContent.textContent =
+              "You have successfully registered";
+            successMessageContent.style.color = "green";
+            successMessageContainer.appendChild(successMessageContent);
+
+            setTimeout(
+              () => (successMessageContainer.style.display = "none"),
+              2000
+            );
+
+            submitButtonElement.parentNode.insertBefore(
+              successMessageContainer,
+              submitButtonElement.nextSibling
+            );
+            return;
+          }
+        });
+      });
+    </script>
+<div class="container">
+  <div class="image">
+    <img src="images/LoginPage1.png" alt="Penguin Image" style="margin-top: 70px; position: relative; width: 400 px; height: 400px; margin-right: -130px;">
+  </div>
+</div>
+  <div class="center">
+    <h1 id="header">Login</h1>
+    <form>
+      <div class="txt_field">
+        <input type="text" required data-username />
+        <span></span>
+        <label>Username</label>
+      </div>
+      <div class="txt_field">
+        <input type="password" required data-password />
+        <span></span>
+        <label>Password</label>
+      </div>
+      <div class="txt_field" id="confirm_password" style="display: none">
+        <input type="password" required data-confirm-password />
+        <span></span>
+        <label>Confirm Password</label>
+      </div>
+      <div class="pass">Forgot Password?</div>
+      <input type="submit" value="Login" id="submit_btn" />
+    </form>
+    <div class="signup_link">
+      Not a member? <a href="#" id="signup_btn_redirection">Signup</a>
+    </div>
+    <div class="login_link" style="display: none">
+      Already a member? <a href="#" id="login_btn_redirection">Login</a>
+      </div>
+    </div>
+  </body>
+</html>

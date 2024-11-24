@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>PianoNoteDetectionv0.2</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/vextab@2.0.13/releases/vextab.css"
+    />
+  </head>
+
+  <body>
+    <button id="showStatsBtn">Show Scores</button>
+    <div id="popup" class="popup">
+      <div class="popup-content">
+        <span id="songNamePopup"></span>
+        <ul id="attemptList"></ul>
+        <button id="closePopupBtn">Close</button>
+      </div>
+    </div>
+    <div class="PenguinSimpu">
+    <img src="images/PianoPage.png"style="right: 100px; position: absolute; top: 30px; left: 60px; height: 320px;"></div> 
+    <div id="go">Go</div>
+    <div
+      style="
+        position: absolute;
+        top: 1rem;
+        right: 100px;
+        cursor: pointer;
+        background-color: black;
+        padding: 15px 20px;
+        border-radius: 10px;
+        color: white;
+        font-weight: 1000;
+      "
+      id="logout-btn"
+    >
+      Logout
+    </div>
+    <div class="button-container">
+      <label>
+        <br />
+        <select id="songSelect">
+          <option selected disabled value="">Pick a Song</option>
+          <optgroup label="Easy">
+            <option
+              value="[4/4; C4 C4 G4 G4 A4 A4 G4 -][F4 F4 E4 E4 D4 D4 C4 -]N[G4 G4 F4 F4 E4 E4 D4 -][G4 G4 F4 F4 E4 E4 D4 -]N[C4 C4 G4 G4 A4 A4 G4 -][F4 F4 E4 E4 D4 D4 C4 -]
+"
+            >
+              Twinkle Twinkle Little Star
+            </option>
+            <option value="[4/4; C4 C4]">Ode to Joy</option>  
+            <option value="[4/4; C4 C4]">Mary had a little lamb</option>
+          </optgroup>
+          <optgroup label="Medium">
+            <option
+              value="[4/4; B4 C#5 D5 C#5 B4 A4 F#4 -][E4 F#4 B4 F#4 G#4 A4 -][G#4 F#4 G#4 E4 F#4 C#3 F#3 B3 A#3]N[4/4; B4 C#5 D5 C#5 B4 A4 E5 F#5 A#5]"
+            >
+              Hanachirusato
+            </option>
+          </optgroup>
+          <optgroup label="Hard"></optgroup>
+        </select>
+      </label>
+
+      </div>
+    </div>
+    <div id="show-options"><a href="#">Options</a></div>
+
+    <div id="options">
+      <div id="win-size" class="opts">
+        <div id="x0k">512</div>
+        <div id="x1k">1024</div>
+        <div id="x2k" class="active">2048</div>
+        <div id="x4k">4096</div>
+      </div>
+
+      <div id="win-type" class="opts">
+        <div id="raw">None</div>
+        <div id="hann">Hann</div>
+        <div id="hamming" class="active">Hamming</div>
+        <div id="blackman">Blackman</div>
+        <div id="lanczos">Lanczos</div>
+      </div>
+    </div>
+
+    <div id="graph">
+      <span></span>
+      <canvas width="440" height="128"></canvas>
+    </div>
+
+    <div id="result">Click Go and play a note</div>
+
+    <!--	<div id=trace></div>-->
+    <div id="tabs"></div>
+
+    <script
+      type="text/javascript"
+      src="https://code.jquery.com/jquery-1.8.3.min.js"
+    ></script>
+    <script
+      type="text/javascript"
+      src="https://cdn.jsdelivr.net/npm/vexflow@4.2.4/build/cjs/vexflow.js"
+    ></script>
+    <script
+      type="text/javascript"
+      src="https://unpkg.com/vextab@3.0.6/releases/vextab-div.js"
+    ></script>
+    <script type="text/javascript" src="note-detector.js"></script>
+    <script type="text/javascript" src="note-utils.js"></script>
+    <script type="text/javascript" src="simple-tab-parser.js"></script>
+    <script>
+      const songSelect = document.getElementById("songSelect");
+      const logoutButton = document.querySelector("#logout-btn");
+      const currentUser = localStorage.getItem("current_user");
+      const popup = document.getElementById("popup");
+      const attemptList = document.getElementById("attemptList");
+      const songNamePopup = document.getElementById("songNamePopup");
+      const progressContainer = document.querySelector("#progressContainer");
+      const resultElement = document.getElementById("result");
+
+      let noteQueue = [];
+      let currentPosition = 0;
+      let progressPercentage = 0;
+      let accuracy = 0;
+      let correctNotes = 0;
+      let wrongNotes = 0;
+
+      function saveProgressPercentage(progress) {
+        const songName = songSelect.selectedOptions[0].textContent.trim();
+        const userData = JSON.parse(localStorage.getItem("user_data")) || {};
+        const userSongData = userData[currentUser.username] = userData[currentUser.username] || {};
+        const songProgress = userSongData[songName] = userSongData[songName] || {};
+        songProgress.progress = progress;
+        localStorage.setItem("user_data", JSON.stringify(userData));
+      }
+      function saveSongData() {
+        const songName = songSelect.selectedOptions[0].textContent.trim();
+        const userData = JSON.parse(localStorage.getItem("user_data")) || {};
+        const userSongData = userData[currentUser.username] = userData[currentUser.username] || {};
+        const songProgress = userSongData[songName] = userSongData[songName] || {};
+        const attemptsData = songProgress.attempts = songProgress.attempts || [];
+        
+        attemptsData.push({ attemptNumber: attemptsData.length + 1, progress: progressPercentage });
+        localStorage.setItem("user_data", JSON.stringify(userData));
+      }
+
+      function getSongData(songName) {
+        const userData = JSON.parse(localStorage.getItem("user_data")) || {};
+        return (userData[currentUser.username] && userData[currentUser.username][songName]) || {};
+      }
+
+
+      function showSongStats() {
+        const songName = document.getElementById("songSelect").selectedOptions[0].textContent.trim();
+        const songData = getSongData(songName);
+
+        if (!songData.attempts || songData.attempts.length === 0) {
+          alert("You have not played this song yet.");
+          return;
+        }
+
+        songNamePopup.textContent = songName;
+          attemptList.innerHTML = songData.attempts.map(attempt => 
+            `<li>Attempt ${attempt.attemptNumber}: ${attempt.progress.toFixed(2)}%</li>`
+          ).join('');
+          popup.style.display = "block";
+        }
+
+      document.getElementById("showStatsBtn").addEventListener("click", showSongStats);
+      document.getElementById("closePopupBtn").addEventListener("click", () => {
+      document.getElementById("popup").style.display = "none";
+      });
+
+      logoutButton.addEventListener("click", (event) => {
+        localStorage.removeItem("current_user");
+        window.location.assign("index.html");
+      });
+
+      songSelect.addEventListener("change", loadSong);
+      logoutButton.addEventListener("click", logoutUser);
+      document.getElementById("showStatsBtn").addEventListener("click", showSongStats);
+      document.getElementById("closePopupBtn").addEventListener("click", () => popup.style.display = "none");
+
+      window.onload = () => {
+        if (!currentUser) {
+          window.location.href = "index.html";
+        }
+      };
+
+      function renderTabs() {
+        const tabsElement = document.getElementById("tabs");
+        tabsElement.innerHTML = "";
+        const renderer = new Vex.Flow.Renderer(tabsElement, Vex.Flow.Renderer.Backends.SVG);
+        const artist = new Artist(10, 30, 800, { scale: 0.7 });
+        new VexTab(artist).parse(simpleNotation2VexTab(songSelect.value, currentPosition));
+        artist.render(renderer);
+        const progressPercentageElement = document.querySelector("#progressPercentage");
+        progressPercentage = getProgress(currentPosition, noteQueue.length);
+        progressPercentageElement.textContent = `%${Number(progressPercentage || 0).toFixed(0)}`;
+      }
+
+      function getProgress(currentNote, totalNotes) {
+        return (100 * currentNote) / totalNotes;
+      }
+
+      function loadSong() {
+      currentPosition = 0;
+      accuracy = 0;
+      correctNotes = 0;
+      wrongNotes = 0;
+      renderTabs();
+      noteQueue = extractNotes(songSelect.value);
+
+      // Load song attempt data
+      const songName = document.getElementById("songSelect").selectedOptions[0].textContent.trim();
+      const songData = getSongData(songName);
+      const attemptNumber = songData.attempts || 1;
+
+      // Update UI or perform any necessary actions based on attempt number
+      console.log(`Loading attempt ${attemptNumber} for ${songName}`);
+
+      // Now proceed with the rest of your song loading logic
+    }
+
+      songSelect.onchange = loadSong;
+      if (songSelect.value) loadSong();
+    </script> 
+    <script type="text/javascript">
+      "use strict";
+
+      var conf = {
+        windowSize: 2048,
+        windowType: "hamming",
+      };
+
+      //
+      var enough = false;
+
+      var context = null;
+      var stream = null;
+      var source = null;
+      var analyzer = null;
+
+      var detector = null;
+
+      var canvas = null;
+      var render = null;
+
+      //
+      function log(text) {
+        // console.log(text);
+        // var trace = document.getElementById('trace');
+        // trace.innerHTML = text ? trace.innerHTML + text + '<br>' : '';
+        // trace.scrollTop = trace.scrollHeight;
+      }
+
+      function plot(v_float, color, clear, f_min, f_max) {
+        if (f_min == 0 && f_max == 0) {
+          for (var i = 0; i < v_float.length; i++) {
+            if (v_float[i] > f_max) f_max = v_float[i];
+            if (v_float[i] < f_min) f_min = v_float[i];
+          }
+        }
+
+        var w = canvas.width;
+        var h = canvas.height;
+
+        if (clear) render.clearRect(0, 0, w, h);
+
+        render.strokeStyle = color;
+        render.beginPath();
+
+        for (let i = 0, n = v_float.length; i < n; i++) {
+          let x = (i * w) / n;
+          let f = v_float[i];
+          let y = h - 5 - ((f - f_min) * (h - 10)) / (f_max - f_min);
+
+          if (i) render.lineTo(x, y);
+          else render.moveTo(x, y);
+        }
+
+        render.stroke();
+      }
+      let lastNote = "";
+      let lastVol = 0;
+      
+      function update() {
+        if (!analyzer) return; // Ensure analyzer is initialized
+
+        var input_8 = analyzer.v_uint8;
+        var input_f = analyzer.v_float;
+
+        analyzer.getByteTimeDomainData(input_8);
+
+        for (let i = 0; i < input_8.length; i++)
+          input_f[i] = input_8[i] / 128.0 - 1.0;
+
+        detector.update(input_f);
+
+        plot(detector.buf, "#08f", true, -1, +1);
+
+        var note = detector.getNote();
+        var desc = note && note.stable ? hzToNoteString(note.freq) : "";
+        $("#result").html(desc);
+        
+        const currentNote = desc.replace(".", "");
+        $(`button[aria-label!='']`).css("background", "");
+
+        if (currentPosition < noteQueue.length) {
+        const expectedNote = noteQueue[currentPosition];
+        $(`button[aria-label='${expectedNote}']`).css("background", "#3f0");
+
+          if (
+            lastNote !== currentNote ||
+            ((detector.vol - lastVol) / lastVol) * 100 > 50
+          ) {
+            lastNote = currentNote;
+            lastVol = detector.vol;
+
+            if (noteQueue[currentPosition] === currentNote) {
+              currentPosition += 1;
+              renderTabs();
+            }
+          }
+
+          // Check if we have reached the end of noteQueue
+          if (currentPosition >= noteQueue.length) {
+            // Song is finished
+            $("#result").html("Finished");
+            stop(); // Optionally stop further updates or perform any cleanup
+            return;
+          }
+        }
+
+        // Integrate the following block from the second snippet
+        if (currentNote) {
+          $(`button[aria-label='${currentNote}']`).css("background", "#08f");
+        }
+        requestAnimationFrame(update);
+      }
+
+
+      //
+      function updateConfig() {
+        const sizeMap = { x0k: 512, x1k: 1024, x2k: 2048, x4k: 4096 };
+
+        conf.windowSize = sizeMap[$("#win-size .active").attr("id")];
+        conf.windowType = $("#win-type .active").attr("id");
+      }
+      
+      //
+      function updateGraphTitle() {
+        var $info = $("#graph span");
+        var title =
+          (analyzer ? analyzer.fftSize : conf.windowSize) +
+          " / " +
+          conf.windowType;
+        if ($info.html() != title) $info.html(title);
+      }
+
+      //
+      function initAnalyzer() {
+        if (analyzer) return;
+        analyzer = context.createAnalyser();
+        analyzer.fftSize = conf.windowSize;
+        analyzer.v_uint8 = new Uint8Array(conf.windowSize);
+        analyzer.v_float = new Float32Array(conf.windowSize);
+        source.connect(analyzer);
+        detector = new NoteDetector(conf.windowSize, context.sampleRate, conf.windowType);
+        detector.trace = log;
+      }
+
+      //
+      const throttledUpdate = _.throttle(update, 100); // update at most every 100ms
+
+      function onUpdate() {
+        if (enough) return;
+        throttledUpdate();
+        window.requestAnimationFrame(onUpdate);
+      }
+
+      function onOpened(_stream) {
+        stream = _stream;
+
+        log("Ok");
+        log("sampleRate: " + context.sampleRate);
+        log("windowSize: " + conf.windowSize);
+        log("windowType: " + conf.windowType);
+
+        source = context.createMediaStreamSource(stream);
+
+        try {
+        initAnalyzer();
+      } catch (error) {
+        onError(error); // Handle initialization error
+        return;
+      }
+
+        enough = false;
+        onUpdate();
+
+        $("#go").html("Stop").addClass("active");
+      }
+
+      function onError(error) {
+        log(error.message + " / " + error.name);
+      }
+
+      //
+      async function start() {
+      log("");
+      log("Creating AudioContext...");
+      try {
+        window.AudioContext = window.AudioContext || window.webkitAudioContext;
+        context = new AudioContext();
+      } catch (e) {
+        log("Web Audio API not supported.");
+        return;
+      }
+      log("Requesting local audio stream...");
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        onOpened(stream);
+      } catch (error) {
+        onError(error);
+      }
+    }
+
+
+      function stop() {
+        log("Shutting down...");
+
+        enough = true;
+
+        if (detector) detector = null;
+        if (analyzer) analyzer = null;
+        if (source) source = null;
+
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop());
+          stream = null;
+        }
+
+        if (context) context = null;
+
+        saveSongData(); // Save song data including progression
+
+        // Reset for a new attempt
+        const songName = document.getElementById("songSelect").selectedOptions[0].textContent.trim();
+        currentPosition = 0; // Reset position
+        renderTabs(); // Render tabs to reset UI
+
+        $("#go").html("Go").removeClass("active");
+
+        log("Ok");
+      }
+
+      //
+      $("#go").click(function () {
+        const progressContainer = document.querySelector("#progressContainer");
+        if (stream) {
+          stop();
+          progressContainer.style.display = "none";
+        } else {
+          start();
+          progressContainer.style.display = "flex";
+        }
+
+        return false;
+      });
+
+      $("#show-options").click(function () {
+        $("#options").toggle();
+        return false;
+      });
+
+      $(".opts div").click(function () {
+        var $this = $(this);
+
+        if ($this.hasClass("active")) return false;
+
+        $this.parent().find("div").removeClass("active");
+        $this.addClass("active");
+
+        updateConfig();
+        updateGraphTitle();
+
+        if (analyzer) initAnalyzer();
+
+        return false;
+      });
+
+      //
+      window.onerror = function (msg, file, line, col, error) {
+        alert(msg + ", line/col " + line + "/" + col + ", error " + error);
+      };
+
+      if (!window.requestAnimationFrame)
+        window.requestAnimationFrame = window.webkitRequestAnimationFrame;
+
+      //
+      $(document).ready(function () {
+        canvas = $("#graph canvas")[0];
+        render = canvas.getContext("2d");
+
+        updateConfig();
+        updateGraphTitle();
+        //start();
+      });
+    </script>
+    <div
+      style="
+        display: none;
+        flex-direction: column;
+        width: 100%;
+        align-items: center;
+      "
+      id="progressContainer"
+    >
+      <div style="font-size: 2rem">
+        <span>Progress : </span>
+        <span id="progressPercentage">%0</span>
+      </div>
+    </div>
+    <div id="kb88" class="kb kb--88">
+      <!-- Ensure buttons are properly closed and have correct attributes -->
+      <button
+        aria-label="A0"
+        data-freq="27.5"
+        style="--gcs: 1"
+        type="button"
+      ></button>
+      <button
+        aria-label="A#0"
+        data-freq="29.13523509488062"
+        style="--gcs: 3"
+        type="button"
+      ></button>
+      <button
+        aria-label="B0"
+        data-freq="30.86770632850775"
+        style="--gcs: 4"
+        type="button"
+      ></button>
+      <button
+        aria-label="C1"
+        data-freq="32.70319566257483"
+        style="--gcs: 7"
+        type="button"
+      ></button>
+      <button
+        aria-label="C#1"
+        data-freq="34.64782887210902"
+        style="--gcs: 9"
+        type="button"
+      ></button>
+      <button
+        aria-label="D1"
+        data-freq="36.70809598967594"
+        style="--gcs: 10"
+        type="button"
+      ></button>
+      <button
+        aria-label="D#1"
+        data-freq="38.89087296526011"
+        style="--gcs: 12"
+        type="button"
+      ></button>
+      <button
+        aria-label="E1"
+        data-freq="41.20344461410874"
+        style="--gcs: 13"
+        type="button"
+      ></button>
+      <button
+        aria-label="F1"
+        data-freq="43.653528929125486"
+        style="--gcs: 16"
+        type="button"
+      ></button>
+      <button
+        aria-label="F#1"
+        data-freq="46.24930283895431"
+        style="--gcs: 18"
+        type="button"
+      ></button>
+      <button
+        aria-label="G1"
+        data-freq="48.999429497718666"
+        style="--gcs: 19"
+        type="button"
+      ></button>
+      <button
+        aria-label="G#1"
+        data-freq="51.91308719749314"
+        style="--gcs: 21"
+        type="button"
+      ></button>
+      <button
+        aria-label="A1"
+        data-freq="55"
+        style="--gcs: 22"
+        type="button"
+      ></button>
+      <button
+        aria-label="A#1"
+        data-freq="58.27047018976124"
+        style="--gcs: 24"
+        type="button"
+      ></button>
+      <button
+        aria-label="B1"
+        data-freq="61.7354126570155"
+        style="--gcs: 25"
+        type="button"
+      ></button>
+      <button
+        aria-label="C2"
+        data-freq="65.40639132514966"
+        style="--gcs: 28"
+        type="button"
+      ></button>
+      <button
+        aria-label="C#2"
+        data-freq="69.29565774421803"
+        style="--gcs: 30"
+        type="button"
+      ></button>
+      <button
+        aria-label="D2"
+        data-freq="73.41619197935188"
+        style="--gcs: 31"
+        type="button"
+      ></button>
+      <button
+        aria-label="D#2"
+        data-freq="77.78174593052022"
+        style="--gcs: 33"
+        type="button"
+      ></button>
+      <button
+        aria-label="E2"
+        data-freq="82.40688922821748"
+        style="--gcs: 34"
+        type="button"
+      ></button>
+      <button
+        aria-label="F2"
+        data-freq="87.30705785825097"
+        style="--gcs: 37"
+        type="button"
+      ></button>
+      <button
+        aria-label="F#2"
+        data-freq="92.49860567790861"
+        style="--gcs: 39"
+        type="button"
+      ></button>
+      <button
+        aria-label="G2"
+        data-freq="97.99885899543733"
+        style="--gcs: 40"
+        type="button"
+      ></button>
+      <button
+        aria-label="G#2"
+        data-freq="103.82617439498628"
+        style="--gcs: 42"
+        type="button"
+      ></button>
+      <button
+        aria-label="A2"
+        data-freq="110"
+        style="--gcs: 43"
+        type="button"
+      ></button>
+      <button
+        aria-label="A#2"
+        data-freq="116.54094037952248"
+        style="--gcs: 45"
+        type="button"
+      ></button>
+      <button
+        aria-label="B2"
+        data-freq="123.47082531403103"
+        style="--gcs: 46"
+        type="button"
+      ></button>
+      <button
+        aria-label="C3"
+        data-freq="130.8127826502993"
+        style="--gcs: 49"
+        type="button"
+      ></button>
+      <button
+        aria-label="C#3"
+        data-freq="138.59131548843604"
+        style="--gcs: 51"
+        type="button"
+      ></button>
+      <button
+        aria-label="D3"
+        data-freq="146.8323839587038"
+        style="--gcs: 52"
+        type="button"
+      ></button>
+      <button
+        aria-label="D#3"
+        data-freq="155.56349186104043"
+        style="--gcs: 54"
+        type="button"
+      ></button>
+      <button
+        aria-label="E3"
+        data-freq="164.81377845643496"
+        style="--gcs: 55"
+        type="button"
+      ></button>
+      <button
+        aria-label="F3"
+        data-freq="174.61411571650194"
+        style="--gcs: 58"
+        type="button"
+      ></button>
+      <button
+        aria-label="F#3"
+        data-freq="184.99721135581723"
+        style="--gcs: 60"
+        type="button"
+      ></button>
+      <button
+        aria-label="G3"
+        data-freq="195.99771799087463"
+        style="--gcs: 61"
+        type="button"
+      ></button>
+      <button
+        aria-label="G#3"
+        data-freq="207.65234878997256"
+        style="--gcs: 63"
+        type="button"
+      ></button>
+      <button
+        aria-label="A3"
+        data-freq="220"
+        style="--gcs: 64"
+        type="button"
+      ></button>
+      <button
+        aria-label="A#3"
+        data-freq="233.08188075904496"
+        style="--gcs: 66"
+        type="button"
+      ></button>
+      <button
+        aria-label="B3"
+        data-freq="246.94165062806206"
+        style="--gcs: 67"
+        type="button"
+      ></button>
+      <button
+        aria-label="C4"
+        data-freq="261.6255653005986"
+        style="--gcs: 70"
+        type="button"
+      ></button>
+      <button
+        aria-label="C#4"
+        data-freq="277.1826309768721"
+        style="--gcs: 72"
+        type="button"
+      ></button>
+      <button
+        aria-label="D4"
+        data-freq="293.6647679174076"
+        style="--gcs: 73"
+        type="button"
+      ></button>
+      <button
+        aria-label="D#4"
+        data-freq="311.12698372208087"
+        style="--gcs: 75"
+        type="button"
+      ></button>
+      <button
+        aria-label="E4"
+        data-freq="329.6275569128699"
+        style="--gcs: 76"
+        type="button"
+      ></button>
+      <button
+        aria-label="F4"
+        data-freq="349.2282314330039"
+        style="--gcs: 79"
+        type="button"
+      ></button>
+      <button
+        aria-label="F#4"
+        data-freq="369.99442271163446"
+        style="--gcs: 81"
+        type="button"
+      ></button>
+      <button
+        aria-label="G4"
+        data-freq="391.99543598174927"
+        style="--gcs: 82"
+        type="button"
+      ></button>
+      <button
+        aria-label="G#4"
+        data-freq="415.3046975799451"
+        style="--gcs: 84"
+        type="button"
+      ></button>
+      <button
+        aria-label="A4"
+        data-freq="440"
+        style="--gcs: 85"
+        type="button"
+      ></button>
+      <button
+        aria-label="A#4"
+        data-freq="466.1637615180899"
+        style="--gcs: 87"
+        type="button"
+      ></button>
+      <button
+        aria-label="B4"
+        data-freq="493.8833012561241"
+        style="--gcs: 88"
+        type="button"
+      ></button>
+      <button
+        aria-label="C5"
+        data-freq="523.2511306011972"
+        style="--gcs: 91"
+        type="button"
+      ></button>
+      <button
+        aria-label="C#5"
+        data-freq="554.3652619537442"
+        style="--gcs: 93"
+        type="button"
+      ></button>
+      <button
+        aria-label="D5"
+        data-freq="587.3295358348151"
+        style="--gcs: 94"
+        type="button"
+      ></button>
+      <button
+        aria-label="D#5"
+        data-freq="622.2539674441618"
+        style="--gcs: 96"
+        type="button"
+      ></button>
+      <button
+        aria-label="E5"
+        data-freq="659.2551138257398"
+        style="--gcs: 97"
+        type="button"
+      ></button>
+      <button
+        aria-label="F5"
+        data-freq="698.4564628660078"
+        style="--gcs: 100"
+        type="button"
+      ></button>
+      <button
+        aria-label="F#5"
+        data-freq="739.9888454232688"
+        style="--gcs: 102"
+        type="button"
+      ></button>
+      <button
+        aria-label="G5"
+        data-freq="783.9908719634985"
+        style="--gcs: 103"
+        type="button"
+      ></button>
+      <button
+        aria-label="G#5"
+        data-freq="830.6093951598903"
+        style="--gcs: 105"
+        type="button"
+      ></button>
+      <button
+        aria-label="A5"
+        data-freq="880"
+        style="--gcs: 106"
+        type="button"
+      ></button>
+      <button
+        aria-label="A#5"
+        data-freq="932.3275230361799"
+        style="--gcs: 108"
+        type="button"
+      ></button>
+      <button
+        aria-label="B5"
+        data-freq="987.7666025122483"
+        style="--gcs: 109"
+        type="button"
+      ></button>
+      <button
+        aria-label="C6"
+        data-freq="1046.5022612023945"
+        style="--gcs: 112"
+        type="button"
+      ></button>
+      <button
+        aria-label="C#6"
+        data-freq="1108.7305239074883"
+        style="--gcs: 114"
+        type="button"
+      ></button>
+      <button
+        aria-label="D6"
+        data-freq="1174.6590716696303"
+        style="--gcs: 115"
+        type="button"
+      ></button>
+      <button
+        aria-label="D#6"
+        data-freq="1244.5079348883237"
+        style="--gcs: 117"
+        type="button"
+      ></button>
+      <button
+        aria-label="E6"
+        data-freq="1318.5102276514797"
+        style="--gcs: 118"
+        type="button"
+      ></button>
+      <button
+        aria-label="F6"
+        data-freq="1396.9129257320155"
+        style="--gcs: 121"
+        type="button"
+      ></button>
+      <button
+        aria-label="F#6"
+        data-freq="1479.9776908465376"
+        style="--gcs: 123"
+        type="button"
+      ></button>
+      <button
+        aria-label="G6"
+        data-freq="1567.981743926997"
+        style="--gcs: 124"
+        type="button"
+      ></button>
+      <button
+        aria-label="G#6"
+        data-freq="1661.2187903197805"
+        style="--gcs: 126"
+        type="button"
+      ></button>
+      <button
+        aria-label="A6"
+        data-freq="1760"
+        style="--gcs: 127"
+        type="button"
+      ></button>
+      <button
+        aria-label="A#6"
+        data-freq="1864.6550460723597"
+        style="--gcs: 129"
+        type="button"
+      ></button>
+      <button
+        aria-label="B6"
+        data-freq="1975.533205024496"
+        style="--gcs: 130"
+        type="button"
+      ></button>
+      <button
+        aria-label="C7"
+        data-freq="2093.004522404789"
+        style="--gcs: 133"
+        type="button"
+      ></button>
+      <button
+        aria-label="C#7"
+        data-freq="2217.4610478149766"
+        style="--gcs: 135"
+        type="button"
+      ></button>
+      <button
+        aria-label="D7"
+        data-freq="2349.31814333926"
+        style="--gcs: 136"
+        type="button"
+      ></button>
+      <button
+        aria-label="D#7"
+        data-freq="2489.0158697766474"
+        style="--gcs: 138"
+        type="button"
+      ></button>
+      <button
+        aria-label="E7"
+        data-freq="2637.02045530296"
+        style="--gcs: 139"
+        type="button"
+      ></button>
+      <button
+        aria-label="F7"
+        data-freq="2793.825851464031"
+        style="--gcs: 142"
+        type="button"
+      ></button>
+      <button
+        aria-label="F#7"
+        data-freq="2959.955381693075"
+        style="--gcs: 144"
+        type="button"
+      ></button>
+      <button
+        aria-label="G7"
+        data-freq="3135.9634878539946"
+        style="--gcs: 145"
+        type="button"
+      ></button>
+      <button
+        aria-label="G#7"
+        data-freq="3322.437580639561"
+        style="--gcs: 147"
+        type="button"
+      ></button>
+      <button
+        aria-label="A7"
+        data-freq="3520"
+        style="--gcs: 148"
+        type="button"
+      ></button>
+      <button
+        aria-label="A#7"
+        data-freq="3729.3100921447194"
+        style="--gcs: 150"
+        type="button"
+      ></button>
+      <button
+        aria-label="B7"
+        data-freq="3951.066410048992"
+        style="--gcs: 151"
+        type="button"
+      ></button>
+      <button
+        aria-label="C8"
+        data-freq="4186.009044809578"
+        style="--gcs: 154"
+        type="button"
+      ></button>
+      <button
+        aria-label="C#8"
+        data-freq="4434.922095629953"
+        style="--gcs: 156"
+        type="button"
+      ></button>
+      <button
+        aria-label="D8"
+        data-freq="4698.63628667852"
+        style="--gcs: 157"
+        type="button"
+      ></button>
+      <button
+        aria-label="D#8"
+        data-freq="4978.031739553295"
+        style="--gcs: 159"
+        type="button"
+      ></button>
+      <button
+        aria-label="E8"
+        data-freq="5274.04091060592"
+        style="--gcs: 160"
+        type="button"
+      ></button>
+      <button
+        aria-label="F8"
+        data-freq="5587.651702928062"
+        style="--gcs: 163"
+        type="button"
+      ></button>
+      <button
+        aria-label="F#8"
+        data-freq="5919.91076338615"
+        style="--gcs: 165"
+        type="button"
+      ></button>
+      <button
+        aria-label="G8"
+        data-freq="6271.926975707989"
+        style="--gcs: 166"
+        type="button"
+      ></button>
+      <button
+        aria-label="G#8"
+        data-freq="6644.875161279122"
+        style="--gcs: 168"
+        type="button"
+      ></button>
+      <button
+        aria-label="A8"
+        data-freq="7040"
+        style="--gcs: 169"
+        type="button"
+      ></button>
+      <button
+        aria-label="A#8"
+        data-freq="7458.620184289437"
+        style="--gcs: 171"
+        type="button"
+      ></button>
+      <button
+        aria-label="B8"
+        data-freq="7902.132820097988"
+        style="--gcs: 172"
+        type="button"
+      ></button>
+    </div>
+    <br>
+    <br>
+    <br>
+  </body>
+</html>
